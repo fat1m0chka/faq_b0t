@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Карта клуба - Грейдерная</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-body: #0a0a0c;
+            --bg-map: #131318;
+            --bg-zone: #1a1a20;
+            --border-zone: #2d2d38;
+            
+            --pc-free-border: #2ecc71;
+            --pc-free-text: #2ecc71;
+            --pc-free-bg: #1f1f27;
+            
+            --pc-busy-color: #e74c3c;
+            --pc-busy-bg: rgba(231, 76, 60, 0.05);
+            
+            --pc-sel-bg: #9b59b6;
+            --pc-sel-shadow: rgba(155, 89, 182, 0.4);
+
+            --pc-maint-color: #f39c12;
+            --pc-maint-bg: rgba(243, 156, 18, 0.05);
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: #ffffff;
+            margin: 0;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: 80px;
+        }
+
+        .header { text-align: center; margin-bottom: 15px; }
+        .header h2 { font-size: 18px; margin-bottom: 10px; }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            font-size: 11px;
+            color: #8e8e93;
+            flex-wrap: wrap;
+        }
+
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .box { width: 12px; height: 12px; border-radius: 3px; }
+        .box.free { background: var(--pc-free-border); }
+        .box.busy { background: var(--pc-busy-color); }
+        .box.sel { background: var(--pc-sel-bg); }
+        .box.maint { background: var(--pc-maint-color); }
+
+        .map-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 20px;
+            scrollbar-width: thin;
+            scrollbar-color: #333 transparent;
+        }
+
+        .map-layout {
+            display: flex;
+            gap: 20px;
+            min-width: 680px; 
+            background: var(--bg-map);
+            padding: 25px 20px 20px 20px;
+            border-radius: 16px;
+            border: 2px solid #23232c;
+        }
+
+        .col-left { display: flex; flex-direction: column; }
+        .col-right { display: flex; flex-direction: column; gap: 20px; flex: 1; }
+        .row { display: flex; gap: 20px; }
+
+        .zone {
+            border: 2px solid var(--border-zone);
+            background: var(--bg-zone);
+            border-radius: 12px;
+            padding: 15px;
+            position: relative;
+            display: flex;
+            gap: 10px;
+        }
+
+        .zone::before {
+            content: attr(data-name);
+            position: absolute;
+            top: -10px;
+            left: 15px;
+            background: var(--bg-map); 
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #7b7b8a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .pc {
+            width: 46px;
+            height: 46px;
+            background: var(--pc-free-bg);
+            border: 2px solid var(--pc-free-border);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--pc-free-text);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        .pc.busy {
+            border-color: var(--pc-busy-color);
+            color: var(--pc-busy-color);
+            background: var(--pc-busy-bg);
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .pc.maint {
+            border-color: var(--pc-maint-color);
+            color: var(--pc-maint-color);
+            background: var(--pc-maint-bg);
+            cursor: not-allowed;
+            opacity: 0.8;
+        }
+
+        .pc.selected {
+            background: var(--pc-sel-bg);
+            border-color: var(--pc-sel-bg);
+            color: white;
+            transform: translateY(-4px);
+            box-shadow: 0 8px 15px var(--pc-sel-shadow);
+        }
+
+        .pc-wide { width: auto; padding: 0 15px; font-size: 14px; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+        .modal {
+            background: var(--bg-zone);
+            border: 2px solid var(--border-zone);
+            border-radius: 16px;
+            padding: 20px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.2s;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .modal-overlay.active .modal { transform: scale(1); }
+        
+        .modal-title { font-size: 22px; font-weight: bold; margin-bottom: 10px; color: #fff; }
+        .modal-cat { font-size: 12px; color: #9b59b6; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px; }
+        .modal-specs {
+            background: var(--bg-map);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 14px;
+            color: #ccc;
+            margin-bottom: 20px;
+            line-height: 1.5;
+            border: 1px solid var(--border-zone);
+        }
+        
+        .modal-btn {
+            width: 100%; padding: 12px; border: none; border-radius: 8px;
+            font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-bottom: 10px;
+        }
+        .btn-select { background: var(--pc-free-border); color: #000; }
+        .btn-deselect { background: var(--pc-sel-bg); color: #fff; }
+        .btn-close { background: transparent; color: #8e8e93; border: 1px solid #333; }
+        .modal-btn:active { transform: scale(0.97); }
+
+        /* Кнопка для локального тестирования в браузере */
+        #web-test-btn {
+            display: none;
+            position: fixed; bottom: 20px; left: 20px; right: 20px;
+            background: #9b59b6; color: white; border: none; padding: 15px; border-radius: 12px;
+            font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(155, 89, 182, 0.4);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>📍 Грейдерная, 1</h2>
+        <div class="legend">
+            <div class="legend-item"><div class="box free"></div> Свободно</div>
+            <div class="legend-item"><div class="box sel"></div> Выбрано</div>
+            <div class="legend-item"><div class="box busy"></div> Занято</div>
+            <div class="legend-item"><div class="box maint"></div> Ремонт</div>
+        </div>
+    </div>
+
+    <div class="map-wrapper">
+        <div class="map-layout">
+            
+            <div class="col-left">
+                <div class="zone" data-name="VIP Пятерка" style="flex-direction: column;">
+                    <div class="pc" data-id="8" data-cat="VIP" data-specs="RTX 3060 Ti<br>Intel Core i5-12400F<br>16 GB RAM<br>Монитор 165Hz">8</div>
+                    <div class="pc" data-id="7" data-cat="VIP" data-specs="RTX 3060 Ti<br>Intel Core i5-12400F<br>16 GB RAM<br>Монитор 165Hz">7</div>
+                    <div class="pc busy" data-id="6">6</div> 
+                    <div class="pc" data-id="5" data-cat="VIP" data-specs="RTX 3060 Ti<br>Intel Core i5-12400F<br>16 GB RAM<br>Монитор 165Hz">5</div>
+                    <div class="pc" data-id="4" data-cat="VIP" data-specs="RTX 3060 Ti<br>Intel Core i5-12400F<br>16 GB RAM<br>Монитор 165Hz">4</div>
+                </div>
+            </div>
+
+            <div class="col-right">
+                <div class="row">
+                    <div class="zone" data-name="VIP Четверка" style="display: grid; grid-template-columns: 1fr 1fr;">
+                        <div class="pc maint" data-id="10">10</div>
+                        <div class="pc" data-id="11" data-cat="VIP" data-specs="RTX 3060 Ti<br>i5-12400F | 165Hz">11</div>
+                        <div class="pc" data-id="9" data-cat="VIP" data-specs="RTX 3060 Ti<br>i5-12400F | 165Hz">9</div>
+                        <div class="pc" data-id="12" data-cat="VIP" data-specs="RTX 3060 Ti<br>i5-12400F | 165Hz">12</div>
+                    </div>
+                    
+                    <div class="zone" data-name="VIP Тройка">
+                        <div class="pc" data-id="13" data-cat="VIP" data-specs="RTX 3060 Ti<br>Монитор 165Hz">13</div>
+                        <div class="pc" data-id="14" data-cat="VIP" data-specs="RTX 3060 Ti<br>Монитор 165Hz">14</div>
+                        <div class="pc" data-id="15" data-cat="VIP" data-specs="RTX 3060 Ti<br>Монитор 165Hz">15</div>
+                    </div>
+                    
+                    <div class="zone" data-name="Одиночка">
+                        <div class="pc" data-id="16" data-cat="VIP SOLO" data-specs="RTX 3060 Ti<br>Уединенная комната<br>Монитор 165Hz">16</div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="zone" data-name="MVP Duo">
+                        <div class="pc" data-id="3" data-cat="MVP" data-specs="RTX 3070 Ti / 4070 Ti<br>Intel Core i5-13400F<br>Монитор 240Hz-320Hz">3</div>
+                        <div class="pc" data-id="2" data-cat="MVP" data-specs="RTX 3070 Ti / 4070 Ti<br>Intel Core i5-13400F<br>Монитор 240Hz-320Hz">2</div>
+                    </div>
+                    
+                    <div class="zone" data-name="MVP Solo">
+                        <div class="pc" data-id="1" data-cat="MVP SOLO" data-specs="RTX 3070 Ti / 4070 Ti<br>Максимальный FPS<br>Монитор 320Hz">1</div>
+                    </div>
+
+                    <div class="zone" data-name="Новая тройка">
+                        <div class="pc" data-id="17" data-cat="VIP" data-specs="RTX 3060 Ti<br>Монитор 165Hz">17</div>
+                    </div>
+                </div>
+
+                <div class="row" style="margin-top: auto;">
+                    <div class="zone" data-name="🎮 PS5 Зона">
+                        <div class="pc pc-wide" data-id="PS5_1" data-cat="CONSOLE" data-specs="PlayStation 5<br>2 геймпада DualSense<br>ТВ 4K 65 дюймов">PS5 №1</div>
+                        <div class="pc pc-wide" data-id="PS5_2" data-cat="CONSOLE" data-specs="PlayStation 5<br>2 геймпада DualSense<br>ТВ 4K 65 дюймов">PS5 №2</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div class="modal-overlay" id="pcModal">
+        <div class="modal">
+            <div class="modal-title" id="mTitle">ПК №X</div>
+            <div class="modal-cat" id="mCat">КАТЕГОРИЯ</div>
+            <div class="modal-specs" id="mSpecs">Характеристики...</div>
+            <button class="modal-btn btn-select" id="mActionBtn">Выбрать место</button>
+            <button class="modal-btn btn-close" onclick="closeModal()">Закрыть</button>
+        </div>
+    </div>
+
+    <button id="web-test-btn" onclick="sendTestData()">ТЕСТ: ОТПРАВИТЬ БРОНЬ</button>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        let isTelegram = false;
+        
+        // Проверяем, открыто ли в Телеге
+        if (tg && tg.initData) {
+            isTelegram = true;
+            try { tg.expand(); } catch(e){}
+        }
+
+        let selectedPCs = [];
+        let currentActivePC = null;
+        const mainButton = tg.MainButton;
+        const webTestBtn = document.getElementById('web-test-btn');
+        
+        const modal = document.getElementById('pcModal');
+        const mTitle = document.getElementById('mTitle');
+        const mCat = document.getElementById('mCat');
+        const mSpecs = document.getElementById('mSpecs');
+        const mActionBtn = document.getElementById('mActionBtn');
+
+        // Безопасный вызов вибрации
+        function safeHaptic(type) {
+            if (!isTelegram) return;
+            try {
+                if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+                if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+                if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+            } catch(e) {}
+        }
+
+        document.querySelectorAll('.pc').forEach(pc => {
+            pc.addEventListener('click', () => {
+                if (pc.classList.contains('busy') || pc.classList.contains('maint')) {
+                    safeHaptic('error'); 
+                    return; 
+                }
+
+                currentActivePC = pc;
+                const id = pc.getAttribute('data-id');
+                const cat = pc.getAttribute('data-cat') || 'ПК';
+                const specs = pc.getAttribute('data-specs') || 'Стандартное железо';
+                
+                mTitle.innerHTML = id.includes('PS') ? id.replace('_', ' №') : `Компьютер №${id}`;
+                mCat.innerHTML = cat;
+                mSpecs.innerHTML = specs;
+
+                if (pc.classList.contains('selected')) {
+                    mActionBtn.className = 'modal-btn btn-deselect';
+                    mActionBtn.innerHTML = 'Снять выбор';
+                } else {
+                    mActionBtn.className = 'modal-btn btn-select';
+                    mActionBtn.innerHTML = 'Выбрать место';
+                }
+
+                safeHaptic('light');
+                modal.classList.add('active');
+            });
+        });
+
+        function closeModal() {
+            modal.classList.remove('active');
+            currentActivePC = null;
+        }
+
+        modal.addEventListener('click', (e) => {
+            if(e.target === modal) closeModal();
+        });
+
+        mActionBtn.addEventListener('click', () => {
+            const id = currentActivePC.getAttribute('data-id');
+            
+            if (currentActivePC.classList.contains('selected')) {
+                currentActivePC.classList.remove('selected');
+                selectedPCs = selectedPCs.filter(p => p !== id);
+                safeHaptic('light');
+            } else {
+                currentActivePC.classList.add('selected');
+                selectedPCs.push(id);
+                safeHaptic('medium');
+            }
+            
+            updateMainButton();
+            closeModal();
+        });
+
+        function updateMainButton() {
+            if (selectedPCs.length > 0) {
+                if (isTelegram) {
+                    mainButton.text = `ПРОДОЛЖИТЬ (${selectedPCs.length} шт.)`;
+                    mainButton.color = "#9b59b6";
+                    mainButton.show();
+                } else {
+                    webTestBtn.style.display = 'block';
+                    webTestBtn.innerHTML = `ТЕСТ: ЗАБРОНИРОВАТЬ (${selectedPCs.length} шт.)`;
+                }
+            } else {
+                if (isTelegram) {
+                    mainButton.hide();
+                } else {
+                    webTestBtn.style.display = 'none';
+                }
+            }
+        }
+
+        if (isTelegram) {
+            Telegram.WebApp.onEvent('mainButtonClicked', function() {
+                const data = JSON.stringify({ action: 'book_pcs', location: 'loc_greyder', pcs: selectedPCs });
+                tg.sendData(data);
+            });
+        }
+
+        // Для теста в десктопном браузере
+        function sendTestData() {
+            alert("Данные, которые улетят в бота:\n" + JSON.stringify({ action: 'book_pcs', location: 'loc_greyder', pcs: selectedPCs }, null, 2));
+        }
+    </script>
+</body>
+</html>

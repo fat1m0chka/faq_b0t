@@ -1,0 +1,7 @@
+aiogram==3.13.0
+aiohttp
+sqlalchemy
+aiosqlite
+fastapi
+uvicorn
+python-dotenv
